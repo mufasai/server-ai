@@ -39,13 +39,43 @@ app.post('/api/extract-pdf', async (req, res) => {
         const pdfData = pdfBase64.split(',')[1] || pdfBase64;
         const pdfBuffer = Buffer.from(pdfData, 'base64');
 
-        // Use pdfjs-dist to extract text
+        // Use pdfjs-dist with Node.js canvas for serverless compatibility
         const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
-        // Load PDF
+        // Configure for Node.js environment
+        const NodeCanvasFactory = (await import('canvas')).default;
+
+        // Create a custom canvas factory for Node.js
+        class NodeCanvasFactoryImpl {
+            create(width, height) {
+                const { createCanvas } = NodeCanvasFactory;
+                const canvas = createCanvas(width, height);
+                return {
+                    canvas,
+                    context: canvas.getContext('2d')
+                };
+            }
+
+            reset(canvasAndContext, width, height) {
+                canvasAndContext.canvas.width = width;
+                canvasAndContext.canvas.height = height;
+            }
+
+            destroy(canvasAndContext) {
+                canvasAndContext.canvas.width = 0;
+                canvasAndContext.canvas.height = 0;
+                canvasAndContext.canvas = null;
+                canvasAndContext.context = null;
+            }
+        }
+
+        // Load PDF with Node.js configuration
         const loadingTask = pdfjsLib.getDocument({
             data: new Uint8Array(pdfBuffer),
             useSystemFonts: true,
+            standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.624/standard_fonts/',
+            canvasFactory: new NodeCanvasFactoryImpl(),
+            isEvalSupported: false,
         });
 
         const pdf = await loadingTask.promise;
