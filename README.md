@@ -1,6 +1,6 @@
 # MUZ AI - Backend Proxy untuk Agent Router
 
-Backend proxy sederhana untuk menghubungkan frontend dengan Agent Router API.
+Backend proxy sederhana untuk menghubungkan frontend dengan Open Router API.
 
 ## Setup
 
