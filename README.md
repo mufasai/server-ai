@@ -58,13 +58,3 @@ curl -X POST http://localhost:3001/api/chat \
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 ```
-
-## Deploy (Optional)
-
-Backend ini bisa di-deploy ke:
-- **Vercel** (gratis)
-- **Railway** (gratis)
-- **Render** (gratis)
-- **Heroku** (berbayar)
-
-Tinggal push ke GitHub dan connect ke platform tersebut.
