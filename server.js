@@ -42,14 +42,18 @@ app.post('/api/extract-pdf', async (req, res) => {
         const pdfBuffer = Buffer.from(pdfData, 'base64');
 
         // Use pdf-parse (simpler, serverless-compatible)
-        const pdfParse = require('pdf-parse');
+        const { PDFParse } = require('pdf-parse');
 
-        // Parse PDF
-        const data = await pdfParse(pdfBuffer);
+        // Parse PDF using v2 API
+        const parser = new PDFParse({ data: pdfBuffer });
+        const data = await parser.getText();
 
         let fullText = data.text;
-        const numPages = data.numpages;
+        const numPages = data.total;
         let hasText = fullText && fullText.trim().length > 0;
+
+        // Essential: destroy parser to free memory (Vercel/Serverless compatible)
+        await parser.destroy();
 
         // If no text found, return helpful message
         if (!hasText || fullText.trim().length < 50) {
