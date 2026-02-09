@@ -24,7 +24,7 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: 'Agent Router Proxy is running' });
 });
 
-// PDF extraction endpoint with OCR support
+// PDF extraction endpoint (Vercel-compatible, no OCR)
 app.post('/api/extract-pdf', async (req, res) => {
     try {
         const { pdfBase64 } = req.body;
@@ -68,76 +68,28 @@ app.post('/api/extract-pdf', async (req, res) => {
             }
         }
 
-        // If no text found, try OCR
+        // If no text found, return helpful message
         if (!hasText || fullText.trim().length < 50) {
-            console.log('No text found, attempting OCR...');
-
-            try {
-                const { createCanvas } = await import('canvas');
-                const Tesseract = await import('tesseract.js');
-
-                let ocrText = '';
-
-                for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-                    const page = await pdf.getPage(pageNum);
-                    const viewport = page.getViewport({ scale: 2.0 });
-
-                    // Create canvas
-                    const canvas = createCanvas(viewport.width, viewport.height);
-                    const context = canvas.getContext('2d');
-
-                    // Render PDF page to canvas
-                    await page.render({
-                        canvasContext: context,
-                        viewport: viewport
-                    }).promise;
-
-                    // Convert canvas to image buffer
-                    const imageBuffer = canvas.toBuffer('image/png');
-
-                    // Perform OCR
-                    console.log(`OCR processing page ${pageNum}/${numPages}...`);
-                    const { data: { text } } = await Tesseract.recognize(
-                        imageBuffer,
-                        'eng+ind', // English + Indonesian
-                        {
-                            logger: m => {
-                                if (m.status === 'recognizing text') {
-                                    console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
-                                }
-                            }
-                        }
-                    );
-
-                    ocrText += text + '\n\n';
-                }
-
-                fullText = ocrText;
-                console.log(`OCR completed: ${fullText.length} characters extracted`);
-            } catch (ocrError) {
-                console.error('OCR error:', ocrError);
-                return res.status(500).json({
-                    error: 'PDF contains images but OCR failed',
-                    message: 'This PDF appears to be a scan or contains only images. OCR processing failed.',
-                    suggestion: 'Try a PDF with selectable text, or ensure the image quality is good.'
-                });
-            }
+            console.log('No text found in PDF');
+            fullText = '[This PDF appears to be a scan or contains only images. Please use a PDF with selectable text, or try uploading the image directly using the vision model (GPT-4o Mini or Qwen 2.5 VL).]';
         }
 
-        console.log(`PDF extracted: ${numPages} pages, ${fullText.length} characters`);
+        console.log(`PDF extraction completed: ${numPages} pages, ${fullText.length} characters`);
 
         res.json({
             text: fullText.trim(),
             pages: numPages,
             info: {},
-            usedOCR: !hasText
+            usedOCR: false,
+            message: !hasText ? 'PDF contains no selectable text. Try using vision model with image upload instead.' : undefined
         });
 
     } catch (error) {
         console.error('PDF extraction error:', error);
         res.status(500).json({
             error: 'Failed to extract PDF',
-            message: error.message
+            message: error.message,
+            suggestion: 'Make sure the PDF contains selectable text (not a scan). For scanned PDFs, try uploading as an image with a vision model instead.'
         });
     }
 });
