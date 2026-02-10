@@ -1,9 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { createRequire } from 'module';
+import { PDFParse } from 'pdf-parse';
 
-const require = createRequire(import.meta.url);
 dotenv.config();
 
 const app = express();
@@ -41,8 +40,7 @@ app.post('/api/extract-pdf', async (req, res) => {
         const pdfData = pdfBase64.split(',')[1] || pdfBase64;
         const pdfBuffer = Buffer.from(pdfData, 'base64');
 
-        // Use pdf-parse (simpler, serverless-compatible)
-        const { PDFParse } = require('pdf-parse');
+        // Use pdf-parse (v2 ESM)
 
         // Parse PDF using v2 API
         const parser = new PDFParse({ data: pdfBuffer });
