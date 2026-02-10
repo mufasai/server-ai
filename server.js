@@ -1,31 +1,28 @@
+// Local development server only
+// Vercel uses serverless functions in /api folder
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { PDFParse } from 'pdf-parse';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const pdf = require('pdf-parse');
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
 app.use(cors());
-app.use(express.json({ limit: '50mb' })); // Increase limit for image uploads
+app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Increase timeout for long streaming responses
-app.use((req, res, next) => {
-    req.setTimeout(300000); // 5 minutes
-    res.setTimeout(300000); // 5 minutes
-    next();
-});
-
-// Health check endpoint
+// Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: 'Agent Router Proxy is running' });
 });
 
-// PDF extraction endpoint (Vercel-compatible, using pdf-parse)
+// PDF extraction
 app.post('/api/extract-pdf', async (req, res) => {
     try {
         const { pdfBase64 } = req.body;
@@ -36,24 +33,15 @@ app.post('/api/extract-pdf', async (req, res) => {
 
         console.log('Extracting PDF text...');
 
-        // Convert base64 to buffer
         const pdfData = pdfBase64.split(',')[1] || pdfBase64;
         const pdfBuffer = Buffer.from(pdfData, 'base64');
 
-        // Use pdf-parse (v2 ESM)
-
-        // Parse PDF using v2 API
-        const parser = new PDFParse({ data: pdfBuffer });
-        const data = await parser.getText();
+        const data = await pdf(pdfBuffer);
 
         let fullText = data.text;
-        const numPages = data.total;
+        const numPages = data.numpages;
         let hasText = fullText && fullText.trim().length > 0;
 
-        // Essential: destroy parser to free memory (Vercel/Serverless compatible)
-        await parser.destroy();
-
-        // If no text found, return helpful message
         if (!hasText || fullText.trim().length < 50) {
             console.log('No text found in PDF');
             fullText = '[This PDF appears to be a scan or contains only images. Please use a PDF with selectable text, or try uploading the image directly using the vision model (GPT-4o Mini or Qwen 2.5 VL).]';
@@ -79,7 +67,7 @@ app.post('/api/extract-pdf', async (req, res) => {
     }
 });
 
-// Generate HTML/CSS endpoint for inline preview
+// Generate HTML/CSS
 app.post('/api/generate-html', async (req, res) => {
     try {
         const { prompt, model } = req.body;
@@ -125,7 +113,7 @@ NOW: Generate beautiful HTML/CSS code for the user's request.`;
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                'HTTP-Referer': 'http://localhost:5173',
+                'HTTP-Referer': process.env.HTTP_REFERER || 'http://localhost:5173',
                 'X-Title': 'MUZ AI Chat'
             },
             body: JSON.stringify({
@@ -151,7 +139,7 @@ NOW: Generate beautiful HTML/CSS code for the user's request.`;
                     errorMessage = errorData.error?.message || errorMessage;
                 }
             } catch (e) {
-                // Keep default error message
+                // Keep default
             }
 
             return res.status(response.status).json({
@@ -165,15 +153,11 @@ NOW: Generate beautiful HTML/CSS code for the user's request.`;
 
         console.log('Generated HTML/CSS:', generatedContent.substring(0, 200));
 
-        // Parse JSON response
         let parsedCode;
         try {
             let jsonContent = generatedContent;
-
-            // Remove markdown code blocks
             jsonContent = jsonContent.replace(/```json\n/g, '').replace(/```\n/g, '').replace(/\n```/g, '').replace(/```/g, '');
 
-            // Try to find JSON object
             const jsonStart = jsonContent.indexOf('{');
             const jsonEnd = jsonContent.lastIndexOf('}');
 
@@ -202,14 +186,13 @@ NOW: Generate beautiful HTML/CSS code for the user's request.`;
     }
 });
 
-// App Builder endpoint - Generate full React app
+// Generate React app
 app.post('/api/generate-app', async (req, res) => {
     try {
         const { prompt, model } = req.body;
 
         console.log('Generating app with prompt:', prompt);
 
-        // System prompt untuk generate React app structure
         const systemPrompt = `You are an expert React developer and modern UI/UX designer. Generate beautiful, production-ready React applications.
 
 DESIGN PHILOSOPHY:
@@ -252,20 +235,19 @@ NOW: Generate a beautiful React app based on the user's request.`;
             { role: 'user', content: prompt }
         ];
 
-        // Call OpenRouter API
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                'HTTP-Referer': 'http://localhost:5173',
+                'HTTP-Referer': process.env.HTTP_REFERER || 'http://localhost:5173',
                 'X-Title': 'MUZ AI App Builder'
             },
             body: JSON.stringify({
                 model,
                 messages,
                 temperature: 0.7,
-                max_tokens: 3000  // Reduced from 4000 to avoid credit issues
+                max_tokens: 3000
             })
         });
 
@@ -273,7 +255,6 @@ NOW: Generate a beautiful React app based on the user's request.`;
             const errorText = await response.text();
             console.error('OpenRouter error:', errorText);
 
-            // Parse error untuk user-friendly message
             let errorMessage = 'Failed to generate app';
             try {
                 const errorData = JSON.parse(errorText);
@@ -285,7 +266,7 @@ NOW: Generate a beautiful React app based on the user's request.`;
                     errorMessage = errorData.error?.message || errorMessage;
                 }
             } catch (e) {
-                // Keep default error message
+                // Keep default
             }
 
             return res.status(response.status).json({
@@ -299,16 +280,11 @@ NOW: Generate a beautiful React app based on the user's request.`;
 
         console.log('Generated content:', generatedContent.substring(0, 200));
 
-        // Parse JSON response
         let parsedFiles;
         try {
-            // Try to extract JSON from markdown code blocks if present
             let jsonContent = generatedContent;
-
-            // Remove markdown code blocks
             jsonContent = jsonContent.replace(/```json\n/g, '').replace(/```\n/g, '').replace(/\n```/g, '').replace(/```/g, '');
 
-            // Try to find JSON object
             const jsonStart = jsonContent.indexOf('{');
             const jsonEnd = jsonContent.lastIndexOf('}');
 
@@ -318,11 +294,9 @@ NOW: Generate a beautiful React app based on the user's request.`;
 
             parsedFiles = JSON.parse(jsonContent);
 
-            // Post-process: Remove invalid CSS imports from component files
             if (parsedFiles.files) {
                 Object.keys(parsedFiles.files).forEach(filename => {
                     if (filename.endsWith('.js') && filename !== '/App.js') {
-                        // Remove CSS imports from component files (except App.js)
                         parsedFiles.files[filename] = parsedFiles.files[filename]
                             .replace(/import\s+['"]\.\/[^'"]*\.css['"];?\n?/g, '')
                             .replace(/import\s+['"]\.\.\/[^'"]*\.css['"];?\n?/g, '');
@@ -349,27 +323,25 @@ NOW: Generate a beautiful React app based on the user's request.`;
     }
 });
 
-// Proxy endpoint untuk chat completions
+// Chat streaming
 app.post('/api/chat', async (req, res) => {
     try {
         const { model, messages } = req.body;
 
         console.log('Received request:', { model, messageCount: messages?.length });
 
-        // Validasi input
         if (!model || !messages || !Array.isArray(messages)) {
             return res.status(400).json({
                 error: 'Invalid request. Required: model (string) and messages (array)'
             });
         }
 
-        // Kirim request ke OpenRouter (alternatif yang lebih cocok untuk web apps)
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                'HTTP-Referer': 'http://localhost:5173',
+                'HTTP-Referer': process.env.HTTP_REFERER || 'http://localhost:5173',
                 'X-Title': 'MUZ AI'
             },
             body: JSON.stringify({
@@ -377,30 +349,26 @@ app.post('/api/chat', async (req, res) => {
                 messages,
                 stream: true
             })
-            // Removed timeout - let it run as long as needed
         });
 
-        console.log('Agent Router response status:', response.status);
+        console.log('OpenRouter response status:', response.status);
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Agent Router error:', errorText);
+            console.error('OpenRouter error:', errorText);
             return res.status(response.status).json({
-                error: `Agent Router API error: ${response.status}`,
+                error: `OpenRouter API error: ${response.status}`,
                 details: errorText
             });
         }
 
-        // Set headers untuk streaming
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
 
-        // Stream response dari Agent Router ke client
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
 
-        // Handle client disconnect
         req.on('close', () => {
             console.log('Client disconnected, closing stream');
             reader.cancel();
@@ -426,18 +394,15 @@ app.post('/api/chat', async (req, res) => {
 
                 const chunk = decoder.decode(value, { stream: true });
 
-                // Log first chunk to see what we're getting
                 if (chunkCount === 1) {
                     console.log('First chunk received:', chunk.substring(0, 100));
                 }
 
-                // Filter out OPENROUTER PROCESSING messages
                 if (chunk.includes('OPENROUTER PROCESSING')) {
                     console.log('Skipping OPENROUTER PROCESSING message');
                     continue;
                 }
 
-                // Check if client is still connected
                 if (res.writableEnded) {
                     console.log('Response already ended');
                     break;
@@ -461,14 +426,13 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
-// Start server with extended timeouts
-const server = app.listen(PORT, () => {
-    console.log(`🚀 Agent Router Proxy running on http://localhost:${PORT}`);
-    console.log(`📡 Health check: http://localhost:${PORT}/health`);
-    console.log(`💬 Chat endpoint: http://localhost:${PORT}/api/chat`);
-});
+// Local development only
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`🚀 Agent Router Proxy running on http://localhost:${PORT}`);
+        console.log(`📡 Health check: http://localhost:${PORT}/health`);
+        console.log(`💬 Chat endpoint: http://localhost:${PORT}/api/chat`);
+    });
+}
 
-// Set server timeout for long streaming responses
-server.timeout = 300000; // 5 minutes
-server.keepAliveTimeout = 300000; // 5 minutes
-server.headersTimeout = 310000; // Slightly more than keepAliveTimeout
+export default app;

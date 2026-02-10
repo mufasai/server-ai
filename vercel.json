@@ -2,17 +2,30 @@
     "version": 2,
     "builds": [
         {
-            "src": "server.js",
+            "src": "api/**/*.js",
             "use": "@vercel/node"
         }
     ],
     "routes": [
         {
-            "src": "/(.*)",
-            "dest": "server.js"
+            "src": "/health",
+            "dest": "/api/health.js"
+        },
+        {
+            "src": "/api/extract-pdf",
+            "dest": "/api/extract-pdf.js"
+        },
+        {
+            "src": "/api/chat",
+            "dest": "/api/chat.js"
+        },
+        {
+            "src": "/api/generate-html",
+            "dest": "/api/generate-html.js"
+        },
+        {
+            "src": "/api/generate-app",
+            "dest": "/api/generate-app.js"
         }
-    ],
-    "env": {
-        "NODE_ENV": "production"
-    }
+    ]
 }
